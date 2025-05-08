@@ -1,0 +1,26 @@
+project_name: kubectl-mscale
+builds:
+  - env: [CGO_ENABLED=0]
+    goos:
+      - linux
+      - darwin
+    goarch:
+      - amd64
+      - arm64
+    binary: kubectl-mscale
+archives:
+  - name_template: >-
+      {{ .ProjectName }}_
+      {{- title .Os }}_
+      {{- if eq .Arch "amd64" }}x86_64
+      {{- else }}{{ .Arch }}{{ end }}
+brews:
+  - name: kubectl-mscale
+    repository:
+      owner: stenstromen
+      name: homebrew-tap
+    commit_author:
+      name: stenstromen
+    homepage: https://github.com/Stenstromen/kubectl-mscale
+    description: Scale resources across multiple namespaces
+    directory: Formula
