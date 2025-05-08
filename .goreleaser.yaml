@@ -8,6 +8,8 @@ builds:
       - amd64
       - arm64
     binary: kubectl-mscale
+    ldflags:
+      - -s -w
 archives:
   - name_template: >-
       {{ .ProjectName }}_
