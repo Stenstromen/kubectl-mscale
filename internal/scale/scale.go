@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -13,10 +14,18 @@ import (
 	"k8s.io/client-go/tools/clientcmd"
 )
 
+func getKubeConfigPath() string {
+	kubeconfig := os.Getenv("KUBECONFIG")
+	if kubeconfig == "" {
+		kubeconfig = filepath.Join(os.Getenv("HOME"), ".kube", "config")
+	}
+	return kubeconfig
+}
+
 // ScaleFromFile scales resources defined in a YAML file
 func ScaleFromFile(filename string, replicas, currentReplicas int) error {
 	// Get kubeconfig
-	config, err := clientcmd.BuildConfigFromFlags("", os.Getenv("KUBECONFIG"))
+	config, err := clientcmd.BuildConfigFromFlags("", getKubeConfigPath())
 	if err != nil {
 		return fmt.Errorf("error building kubeconfig: %v", err)
 	}
@@ -63,9 +72,9 @@ func ScaleFromFile(filename string, replicas, currentReplicas int) error {
 }
 
 // ScaleFromArgs scales resources specified by command line arguments
-func ScaleFromArgs(args []string, namespaces string, replicas, currentReplicas int) error {
+func ScaleFromArgs(args []string, resourceType string, namespaces string, replicas, currentReplicas int) error {
 	// Get kubeconfig
-	config, err := clientcmd.BuildConfigFromFlags("", os.Getenv("KUBECONFIG"))
+	config, err := clientcmd.BuildConfigFromFlags("", getKubeConfigPath())
 	if err != nil {
 		return fmt.Errorf("error building kubeconfig: %v", err)
 	}
@@ -76,16 +85,20 @@ func ScaleFromArgs(args []string, namespaces string, replicas, currentReplicas i
 		return fmt.Errorf("error creating Kubernetes client: %v", err)
 	}
 
-	// Parse resource type and names
-	resourceType := strings.Split(args[0], "/")[0]
+	// Parse resource names (now supports both formats for backward compatibility)
 	resourceNames := make([]string, 0)
-
 	for _, arg := range args {
-		parts := strings.Split(arg, "/")
-		if len(parts) != 2 {
-			return fmt.Errorf("invalid resource format: %s", arg)
+		// If it contains a slash, extract just the name part (for backward compatibility)
+		if strings.Contains(arg, "/") {
+			parts := strings.Split(arg, "/")
+			if len(parts) != 2 {
+				return fmt.Errorf("invalid resource format: %s", arg)
+			}
+			resourceNames = append(resourceNames, parts[1])
+		} else {
+			// Use the name directly
+			resourceNames = append(resourceNames, arg)
 		}
-		resourceNames = append(resourceNames, parts[1])
 	}
 
 	// Parse namespaces
@@ -235,4 +248,161 @@ func ScaleResource(clientset kubernetes.Interface, resourceType, name, namespace
 // Helper function to create int32 pointer
 func int32Ptr(i int32) *int32 {
 	return &i
+}
+
+// ScaleAllResources scales all resources of the specified type in the given namespaces
+func ScaleAllResources(resourceType, namespaces string, replicas, currentReplicas int) error {
+	// Get kubeconfig
+	config, err := clientcmd.BuildConfigFromFlags("", getKubeConfigPath())
+	if err != nil {
+		return fmt.Errorf("error building kubeconfig: %v", err)
+	}
+
+	// Create Kubernetes client
+	clientset, err := kubernetes.NewForConfig(config)
+	if err != nil {
+		return fmt.Errorf("error creating Kubernetes client: %v", err)
+	}
+
+	// Parse namespaces
+	namespaceList := []string{"default"}
+	if namespaces != "" {
+		namespaceList = strings.Split(namespaces, ",")
+	}
+
+	// Scale all resources of the specified type in each namespace
+	for _, ns := range namespaceList {
+		switch strings.ToLower(resourceType) {
+		case "deployment", "deploy", "deployments":
+			deployments, err := clientset.AppsV1().Deployments(ns).List(context.TODO(), metav1.ListOptions{})
+			if err != nil {
+				fmt.Printf("Error listing deployments in namespace %s: %v\n", ns, err)
+				continue
+			}
+
+			if len(deployments.Items) == 0 {
+				fmt.Printf("No deployments found in namespace %s\n", ns)
+				continue
+			}
+
+			for _, deployment := range deployments.Items {
+				if err := ScaleResource(clientset, "deployment", deployment.Name, ns, replicas, currentReplicas); err != nil {
+					fmt.Printf("Error scaling deployment %s in namespace %s: %v\n", deployment.Name, ns, err)
+				}
+			}
+
+		case "statefulset", "sts", "statefulsets":
+			statefulsets, err := clientset.AppsV1().StatefulSets(ns).List(context.TODO(), metav1.ListOptions{})
+			if err != nil {
+				fmt.Printf("Error listing statefulsets in namespace %s: %v\n", ns, err)
+				continue
+			}
+
+			if len(statefulsets.Items) == 0 {
+				fmt.Printf("No statefulsets found in namespace %s\n", ns)
+				continue
+			}
+
+			for _, statefulset := range statefulsets.Items {
+				if err := ScaleResource(clientset, "statefulset", statefulset.Name, ns, replicas, currentReplicas); err != nil {
+					fmt.Printf("Error scaling statefulset %s in namespace %s: %v\n", statefulset.Name, ns, err)
+				}
+			}
+
+		case "replicaset", "rs", "replicasets":
+			replicasets, err := clientset.AppsV1().ReplicaSets(ns).List(context.TODO(), metav1.ListOptions{})
+			if err != nil {
+				fmt.Printf("Error listing replicasets in namespace %s: %v\n", ns, err)
+				continue
+			}
+
+			if len(replicasets.Items) == 0 {
+				fmt.Printf("No replicasets found in namespace %s\n", ns)
+				continue
+			}
+
+			for _, replicaset := range replicasets.Items {
+				if err := ScaleResource(clientset, "replicaset", replicaset.Name, ns, replicas, currentReplicas); err != nil {
+					fmt.Printf("Error scaling replicaset %s in namespace %s: %v\n", replicaset.Name, ns, err)
+				}
+			}
+
+		case "replicationcontroller", "rc", "replicationcontrollers":
+			rcs, err := clientset.CoreV1().ReplicationControllers(ns).List(context.TODO(), metav1.ListOptions{})
+			if err != nil {
+				fmt.Printf("Error listing replicationcontrollers in namespace %s: %v\n", ns, err)
+				continue
+			}
+
+			if len(rcs.Items) == 0 {
+				fmt.Printf("No replicationcontrollers found in namespace %s\n", ns)
+				continue
+			}
+
+			for _, rc := range rcs.Items {
+				if err := ScaleResource(clientset, "replicationcontroller", rc.Name, ns, replicas, currentReplicas); err != nil {
+					fmt.Printf("Error scaling replicationcontroller %s in namespace %s: %v\n", rc.Name, ns, err)
+				}
+			}
+
+		case "job", "jobs":
+			jobs, err := clientset.BatchV1().Jobs(ns).List(context.TODO(), metav1.ListOptions{})
+			if err != nil {
+				fmt.Printf("Error listing jobs in namespace %s: %v\n", ns, err)
+				continue
+			}
+
+			if len(jobs.Items) == 0 {
+				fmt.Printf("No jobs found in namespace %s\n", ns)
+				continue
+			}
+
+			for _, job := range jobs.Items {
+				if err := ScaleResource(clientset, "job", job.Name, ns, replicas, currentReplicas); err != nil {
+					fmt.Printf("Error scaling job %s in namespace %s: %v\n", job.Name, ns, err)
+				}
+			}
+
+		case "cronjob", "cj", "cronjobs":
+			cronjobs, err := clientset.BatchV1().CronJobs(ns).List(context.TODO(), metav1.ListOptions{})
+			if err != nil {
+				fmt.Printf("Error listing cronjobs in namespace %s: %v\n", ns, err)
+				continue
+			}
+
+			if len(cronjobs.Items) == 0 {
+				fmt.Printf("No cronjobs found in namespace %s\n", ns)
+				continue
+			}
+
+			for _, cronjob := range cronjobs.Items {
+				if err := ScaleResource(clientset, "cronjob", cronjob.Name, ns, replicas, currentReplicas); err != nil {
+					fmt.Printf("Error scaling cronjob %s in namespace %s: %v\n", cronjob.Name, ns, err)
+				}
+			}
+
+		case "horizontalpodautoscaler", "hpa", "horizontalpodautoscalers":
+			hpas, err := clientset.AutoscalingV1().HorizontalPodAutoscalers(ns).List(context.TODO(), metav1.ListOptions{})
+			if err != nil {
+				fmt.Printf("Error listing horizontalpodautoscalers in namespace %s: %v\n", ns, err)
+				continue
+			}
+
+			if len(hpas.Items) == 0 {
+				fmt.Printf("No horizontalpodautoscalers found in namespace %s\n", ns)
+				continue
+			}
+
+			for _, hpa := range hpas.Items {
+				if err := ScaleResource(clientset, "horizontalpodautoscaler", hpa.Name, ns, replicas, currentReplicas); err != nil {
+					fmt.Printf("Error scaling horizontalpodautoscaler %s in namespace %s: %v\n", hpa.Name, ns, err)
+				}
+			}
+
+		default:
+			return fmt.Errorf("unsupported resource type: %s", resourceType)
+		}
+	}
+
+	return nil
 }

@@ -12,34 +12,71 @@ A kubectl plugin for scaling resources across multiple namespaces simultaneously
 
 The primary use case is scaling resources across multiple namespaces in a single command. Here are some examples:
 
-### Scale a single resource across multiple namespaces
+### Scale all resources of a specific type across multiple namespaces
 
 ```bash
-# Scale a deployment named 'nginx' to 3 replicas across multiple namespaces
-kubectl-mscale deployment/nginx --replicas=3 -n default,staging,production
+# Scale all deployments to 3 replicas across multiple namespaces
+kubectl-mscale deployment --replicas=3 -n default,staging,production
 
-# Scale a statefulset named 'mysql' to 2 replicas across multiple namespaces
-kubectl-mscale statefulset/mysql --replicas=2 -n default,staging,production
+# Scale all statefulsets to 2 replicas across multiple namespaces
+kubectl-mscale statefulset --replicas=2 -n default,staging,production
 
-# Scale a replicaset named 'web' to 5 replicas across multiple namespaces
-kubectl-mscale replicaset/web --replicas=5 -n default,staging,production
+# Scale all replicaset to 5 replicas across multiple namespaces
+kubectl-mscale replicaset --replicas=5 -n default,staging,production
 ```
 
-### Scale multiple resources across multiple namespaces
+### Scale one resource with a specific name across multiple namespaces
 
 ```bash
-# Scale multiple deployments to 0 replicas across multiple namespaces
-kubectl-mscale deployment/nginx deployment/redis --replicas=0 -n default,staging,production
+# Scale a deployment named 'nginx' to 0 replicas across multiple namespaces
+kubectl-mscale deployment nginx --replicas=0 -n default,staging,production
 
-# Scale multiple statefulsets to 1 replica across multiple namespaces
-kubectl-mscale statefulset/mysql statefulset/redis --replicas=1 -n default,staging,production
+# Scale a statefulset named 'mysql' to 1 replica across multiple namespaces
+kubectl-mscale statefulset mysql --replicas=1 -n default,staging,production
+```
+
+### Scale all resources of a specific type across all namespaces
+
+```bash
+# Scale ALL deployments to 0 replicas across multiple namespaces
+kubectl-mscale deployment --replicas=0 -n default,staging,production --all
+
+# Scale ALL statefulsets to 1 replica in the default namespace
+kubectl-mscale statefulset --replicas=1 --all
+```
+
+### Scale from a file
+
+```bash
+# Scale resources defined in a YAML file
+kubectl-mscale statefulset --filename=statefulset.yaml --replicas=3
+```
+
+### Scale with verification of current replicas
+
+```bash
+# Only scale if current replicas match the expected value
+kubectl-mscale deployment nginx --replicas=5 --current-replicas=3 -n production
 ```
 
 ## Supported Resource Types
 
-- Deployments
-- StatefulSets
-- ReplicaSets
+The following resource types can be scaled with kubectl-mscale:
+
+- Deployments (`deployment`, `deploy`, `deployments`)
+- StatefulSets (`statefulset`, `sts`, `statefulsets`)
+- ReplicaSets (`replicaset`, `rs`, `replicasets`)
+- ReplicationControllers (`replicationcontroller`, `rc`, `replicationcontrollers`)
+- Jobs (`job`, `jobs`)
+- CronJobs (`cronjob`, `cj`, `cronjobs`)
+- HorizontalPodAutoscalers (`horizontalpodautoscaler`, `hpa`, `horizontalpodautoscalers`)
+
+## Configuration
+
+The plugin will use the Kubernetes configuration from:
+
+1. The KUBECONFIG environment variable if set
+2. The default location at ~/.kube/config if KUBECONFIG is not set
 
 ## Requirements
 

@@ -13,6 +13,7 @@ var (
 	namespaces      string
 	filename        string
 	currentReplicas int
+	all             bool
 )
 
 // rootCmd represents the base command when called without any subcommands
@@ -20,17 +21,17 @@ var rootCmd = &cobra.Command{
 	Use:   "kubectl-mscale",
 	Short: "Scale resources across multiple namespaces",
 	Long:  `A kubectl plugin for scaling resources across multiple namespaces.`,
-	Example: `  # Scale a deployment named 'nginx' to 3 replicas across multiple namespaces
-  kubectl-mscale deployment/nginx --replicas=3 -n default,staging,production
+	Example: `  # Scale all deployments to 3 replicas across multiple namespaces
+  kubectl-mscale deployment --replicas=3 -n default,staging,production
 
-  # Scale multiple deployments to 0 replicas across multiple namespaces
-  kubectl-mscale deployment/nginx deployment/redis --replicas=0 -n default,staging,production
-
-  # Scale a statefulset named 'mysql' to 2 replicas across multiple namespaces
-  kubectl-mscale statefulset/mysql --replicas=2 -n default,staging,production
-
-  # Scale a replicaset named 'web' to 5 replicas across multiple namespaces
-  kubectl-mscale replicaset/web --replicas=5 -n default,staging,production`,
+  # Scale a deployment named 'nginx' to 0 replicas across multiple namespaces
+  kubectl-mscale deployment nginx --replicas=0 -n default,staging,production
+  
+  # Scale ALL deployments to 0 replicas across all namespaces
+  kubectl-mscale deployment --replicas=0 --all
+  
+  # Scale resources defined in a YAML file
+  kubectl-mscale statefulset --filename=statefulset.yaml --replicas=3`,
 }
 
 func Execute() {
@@ -41,15 +42,33 @@ func Execute() {
 }
 
 func init() {
+	createScaleCommand("deployment", "deployment", "deploy", "deployments")
+	createScaleCommand("statefulset", "statefulset", "sts", "statefulsets")
+	createScaleCommand("replicaset", "replicaset", "rs", "replicasets")
+	createScaleCommand("replicationcontroller", "replicationcontroller", "rc", "replicationcontrollers")
+	createScaleCommand("job", "job", "jobs")
+	createScaleCommand("cronjob", "cronjob", "cj", "cronjobs")
+	createScaleCommand("horizontalpodautoscaler", "horizontalpodautoscaler", "hpa", "horizontalpodautoscalers")
+}
+
+// createScaleCommand creates a new scale command with the given name and aliases
+func createScaleCommand(use string, resourceType string, aliases ...string) {
 	scaleCmd := &cobra.Command{
-		Use:   "deployment|sts|rs|rc|job|cj|hpa",
-		Short: "Scale a specific resource type",
-		Args:  cobra.MinimumNArgs(1),
+		Use:     use,
+		Aliases: aliases,
+		Short:   fmt.Sprintf("Scale %s across multiple namespaces", use),
+		Args:    cobra.MinimumNArgs(0),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if filename != "" {
 				return scale.ScaleFromFile(filename, replicas, currentReplicas)
 			}
-			return scale.ScaleFromArgs(args, namespaces, replicas, currentReplicas)
+
+			// If --all flag is set or no args are provided, scale all resources of this type
+			if all || len(args) == 0 {
+				return scale.ScaleAllResources(resourceType, namespaces, replicas, currentReplicas)
+			}
+
+			return scale.ScaleFromArgs(args, resourceType, namespaces, replicas, currentReplicas)
 		},
 	}
 
@@ -57,6 +76,7 @@ func init() {
 	scaleCmd.Flags().StringVarP(&namespaces, "namespace", "n", "", "Comma-separated list of namespaces")
 	scaleCmd.Flags().StringVarP(&filename, "filename", "f", "", "Filename, directory, or URL to files to use to scale the resource")
 	scaleCmd.Flags().IntVar(&currentReplicas, "current-replicas", -1, "Precondition for current size. Requires that the current size of the resource match this value in order to scale")
+	scaleCmd.Flags().BoolVar(&all, "all", false, "Scale all resources of the specified type in the given namespaces")
 	scaleCmd.MarkFlagRequired("replicas")
 
 	rootCmd.AddCommand(scaleCmd)
