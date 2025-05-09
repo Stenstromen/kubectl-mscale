@@ -264,6 +264,11 @@ func ScaleAllResources(resourceType, namespaces string, replicas, currentReplica
 		return fmt.Errorf("error creating Kubernetes client: %v", err)
 	}
 
+	return ScaleAllResourcesWithClientset(clientset, resourceType, namespaces, replicas, currentReplicas)
+}
+
+// ScaleAllResourcesWithClientset scales all resources of the specified type in the given namespaces using the provided clientset
+func ScaleAllResourcesWithClientset(clientset kubernetes.Interface, resourceType, namespaces string, replicas, currentReplicas int) error {
 	// Parse namespaces
 	namespaceList := []string{"default"}
 	if namespaces != "" {

@@ -6,3 +6,10 @@ repos:
       - id: go-vet
       - id: go-build
       - id: go-mod-tidy
+  - repo: local
+    hooks:
+      - id: test
+        name: Running Go Tests
+        entry: go test ./internal/scale
+        language: golang
+        pass_filenames: false
