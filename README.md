@@ -1,5 +1,7 @@
 # kubectl-mscale
 
+![kubectl-mscale logo](./kubectl-mscale.webp)
+
 - [kubectl-mscale](#kubectl-mscale)
   - [Description](#description)
   - [Installation via Homebrew (MacOS/Linux - x86\_64/arm64)](#installation-via-homebrew-macoslinux---x86_64arm64)
